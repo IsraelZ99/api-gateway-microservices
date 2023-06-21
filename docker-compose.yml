@@ -1,0 +1,214 @@
+version: '3'
+services:
+    keycloak-mysql:
+        container_name: keycloak-database
+        image: mysql:5.7
+        environment:
+          MYSQL_ROOT_PASSWORD: k3yM4sql
+          MYSQL_DATABASE: keycloak
+          MYSQL_USER: keyloack
+          MYSQL_PASSWORD: k3yM4sql
+        networks:
+          - demo-api-gateway 
+    keycloak:
+        container_name: keycloak-server
+        image: quay.io/keycloak/keycloak:21.1.1
+        ports:
+          - "8080:8080"
+        environment:
+          DB_VENDOR: MYSQL
+          DB_ADDR: keycloak-mysql
+          DB_DATABASE: keycloak
+          DB_USER: keyloack
+          DB_PASSWORD: k3yM4sql
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: 4dm1n
+        command: "start-dev --import-realm"
+        volumes:
+          - "./data/keycloak-server-data:/opt/keycloak/data/import"
+        depends_on:
+          - keycloak-mysql
+        networks:
+          - demo-api-gateway 
+    zipkin:
+        container_name: zipkin-server
+        image: openzipkin/zipkin
+        ports:
+          - "9411:9411"
+        networks:
+          - demo-api-gateway 
+    zookeeper:
+        image: confluentinc/cp-zookeeper:7.3.2
+        container_name: kafka-zookeeper
+        environment:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        networks:
+          - demo-api-gateway 
+    broker:
+      image: confluentinc/cp-kafka:7.3.2
+      container_name: kafka-broker
+      ports:
+        - "9092:9092"
+      depends_on:
+        - zookeeper
+      environment:
+        KAFKA_BROKER_ID: 1
+        KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+        KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+        KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
+        KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+        KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      networks:
+          - demo-api-gateway
+
+    prometheus:
+        container_name: prometheus
+        image: prom/prometheus
+        ports:
+          - "9090:9090"
+        volumes:
+          - ./data/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+        depends_on:
+          - product-service
+          - inventory-service
+          - order-service
+          - notification-service
+        networks:
+          - demo-api-gateway
+    grafana:
+        container_name: grafana
+        image: grafana/grafana-oss:8.5.2
+        restart: unless-stopped
+        ports:
+          - "3000:3000"
+        links:
+          - prometheus:prometheus
+        environment:
+          GF_SECURITY_ADMIN_USER: admin
+          GF_SECURITY_ADMIN_PASSWORD: password
+        volumes:
+          - "./data/grafana:/var/lib/grafana"
+        networks:
+          - demo-api-gateway
+
+    mongo:
+        container_name: mongodb-server
+        image: mongo
+        ports:
+          - "27017:27017"
+        environment:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: m0ng04dm1n
+        volumes:
+          - "./data/mongodb-server-data:/data/db" 
+        networks:
+          - demo-api-gateway
+    mongo-express:
+        container_name: mongo-server-express
+        image: mongo-express
+        ports:
+          - "7000:8081"
+        environment:
+          ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+          ME_CONFIG_MONGODB_ADMINPASSWORD: m0ng04dm1n
+          ME_CONFIG_MONGODB_URL: mongodb://admin:m0ng04dm1n@mongo:27017/
+        networks:
+          - demo-api-gateway
+    mysql:
+        image: mysql
+        container_name: mysql-server
+        ports:
+          - "3306:3306"
+        environment:
+          MYSQL_ROOT_PASSWORD: m4sql4dm1n
+        volumes:
+          - "./data/mysql-server-data:/var/lib/mysql"
+        networks:
+          - demo-api-gateway    
+
+# API GATEWAY PROJECTS
+    discovery-server:
+        image: znitch23/discovery-server:latest
+        container_name: discovery-server
+        pull_policy: always
+        ports:
+          - "8761:8761"
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+        depends_on:
+          - zipkin
+        networks:
+          - demo-api-gateway 
+    api-gateway:
+        image: znitch23/api-gateway:latest
+        container_name: api-gateway
+        pull_policy: always
+        ports:
+          - "8181:8181"
+        expose:
+          - "8181"
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+          LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: TRACE
+        depends_on:
+          - discovery-server
+          - keycloak
+        networks:
+          - demo-api-gateway 
+    product-service:
+        container_name: product-service
+        image: znitch23/product-service:latest
+        pull_policy: always
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+        depends_on:
+          - mongo
+          - discovery-server
+          - api-gateway
+        networks:
+          - demo-api-gateway 
+    order-service:
+        container_name: order-service
+        image: znitch23/order-service:latest
+        pull_policy: always
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+          SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/order_service
+        depends_on:
+          - mysql
+          - broker
+          - zipkin
+          - discovery-server
+          - api-gateway
+        networks:
+          - demo-api-gateway 
+    inventory-service:
+        container_name: inventory-service
+        image: znitch23/inventory-service:latest
+        pull_policy: always
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+          SPRING_DATASOURCE_URL: jdbc:mysql://mysql-server:3306/inventory_service
+        depends_on:
+          - mysql
+          - discovery-server
+          - api-gateway
+        networks:
+          - demo-api-gateway 
+    notification-service:
+        container_name: notification-service
+        image: znitch23/notification-service:latest
+        pull_policy: always
+        environment:
+          SPRING_PROFILES_ACTIVE: docker
+        depends_on:
+          - zipkin
+          - broker
+          - discovery-server
+          - api-gateway
+        networks:
+          - demo-api-gateway 
+networks:
+      demo-api-gateway:

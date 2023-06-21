@@ -1,0 +1,25 @@
+eureka:
+  client:
+    serviceUrl:
+      defaultZone: http://eureka:password@localhost:8761/eureka
+spring:
+  data:
+    mongodb:
+      uri: mongodb://admin:m0ng04dm1n@localhost:27017/product-service?authSource=admin
+  jpa:
+    show-sql: true
+  application:
+    name: product-service
+  zipkin:
+    base-url: http://localhost:9411
+  sleuth:
+    sampler:
+      probability: 1.0 # 100%
+server:
+  port: 0
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus
