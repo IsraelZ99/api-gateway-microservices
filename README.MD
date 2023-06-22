@@ -10,7 +10,7 @@ This is a course about spring microservices with an API Gateway implementation i
 * Prometheus and Grafana: Monitoring the microservices 
 
 ### Instructions
-* Untar the data files, executing one command by one including in the data/untar-data.txt
+* Untar the data volumes, executing one command by one, included in the data/HELME.md
 * Retrieve credentials from spring-boot-microservices-realm keycloak with the name **spring-cloud-client** and paste into the *Client secret* that are in Postaman Authorization Request 
 
 #### COURSE LINK: https://www.youtube.com/playlist?list=PLSVW22jAG8pBnhAdq9S8BpLnZ0_jVBj0c
